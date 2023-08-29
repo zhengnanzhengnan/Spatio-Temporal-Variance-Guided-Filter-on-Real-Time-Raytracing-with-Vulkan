@@ -22,6 +22,9 @@ RayTracingPipeline::RayTracingPipeline(
 	const TopLevelAccelerationStructure& accelerationStructure,
 	const ImageView& accumulationImageView,
 	const ImageView& outputImageView,
+	const ImageView& saveImageView,
+	const ImageView& motionVectorImageView,
+	const Sampler& motionVectorSampler,
 	const std::vector<Assets::UniformBuffer>& uniformBuffers,
 	const Assets::Scene& scene) :
 	swapChain_(swapChain)
@@ -50,7 +53,13 @@ RayTracingPipeline::RayTracingPipeline(
 		{8, static_cast<uint32_t>(scene.TextureSamplers().size()), VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR},
 
 		// The Procedural buffer.
-		{9, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_INTERSECTION_BIT_KHR}
+		{9, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_INTERSECTION_BIT_KHR},
+
+		//保存的上一帧交换链图像
+		{10, 1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_RAYGEN_BIT_KHR},
+
+		//保存的motion vector纹理图像
+		{11, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_RAYGEN_BIT_KHR}
 	};
 
 	descriptorSetManager_.reset(new DescriptorSetManager(device, descriptorBindings, uniformBuffers.size()));
@@ -102,6 +111,17 @@ RayTracingPipeline::RayTracingPipeline(
 		offsetsBufferInfo.buffer = scene.OffsetsBuffer().Handle();
 		offsetsBufferInfo.range = VK_WHOLE_SIZE;
 
+		//上一帧交换链的图像Info
+		VkDescriptorImageInfo saveImageInfo = {};
+		saveImageInfo.imageView = saveImageView.Handle();
+		saveImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+		//Motion Vector Info
+		VkDescriptorImageInfo motionVectorImageInfo = {};
+		motionVectorImageInfo.imageView = motionVectorImageView.Handle();
+		motionVectorImageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+		motionVectorImageInfo.sampler = motionVectorSampler.Handle();
+
 		// Image and texture samplers.
 		std::vector<VkDescriptorImageInfo> imageInfos(scene.TextureSamplers().size());
 
@@ -136,6 +156,11 @@ RayTracingPipeline::RayTracingPipeline(
 
 			descriptorWrites.push_back(descriptorSets.Bind(i, 9, proceduralBufferInfo));
 		}
+
+		//保存的上一帧交换链图像，bind位置为10
+		descriptorWrites.push_back(descriptorSets.Bind(i, 10, saveImageInfo));
+
+		descriptorWrites.push_back(descriptorSets.Bind(i, 11, motionVectorImageInfo));
 
 		descriptorSets.UpdateDescriptors(i, descriptorWrites);
 	}

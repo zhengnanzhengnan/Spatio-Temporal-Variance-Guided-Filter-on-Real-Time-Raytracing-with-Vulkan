@@ -6,6 +6,7 @@ namespace Vulkan
 {
 	class DepthBuffer;
 	class SwapChain;
+	class ImageView;
 
 	class RenderPass final
 	{

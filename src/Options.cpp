@@ -25,7 +25,7 @@ Options::Options(const int argc, const char* argv[])
 
 	options_description scene("Scene options", lineLength);
 	scene.add_options()
-		("scene", value<uint32_t>(&SceneIndex)->default_value(1), "The scene to start with.")
+		("scene", value<uint32_t>(&SceneIndex)->default_value(4), "The scene to start with.")
 		;
 
 	options_description vulkan("Vulkan options", lineLength);

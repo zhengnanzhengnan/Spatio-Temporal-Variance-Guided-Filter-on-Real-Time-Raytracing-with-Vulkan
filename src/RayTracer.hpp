@@ -61,4 +61,6 @@ private:
 	double sceneInitialTime_{};
 	double periodInitialTime_{};
 	uint32_t periodTotalFrames_{};
+
+	uint32_t FrameCounter = 0;
 };

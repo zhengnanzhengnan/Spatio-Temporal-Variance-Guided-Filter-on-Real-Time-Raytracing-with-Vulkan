@@ -54,6 +54,7 @@ Assets::UniformBufferObject RayTracer::GetUniformBufferObject(const VkExtent2D e
 	ubo.HasSky = init.HasSky;
 	ubo.ShowHeatmap = userSettings_.ShowHeatmap;
 	ubo.HeatmapScale = userSettings_.HeatmapScale;
+	ubo.FrameCounter = this->FrameCounter;
 
 	return ubo;
 }
@@ -133,12 +134,14 @@ void RayTracer::DrawFrame()
 	}
 
 	previousSettings_ = userSettings_;
-
+	 
 	// Keep track of our sample count.
 	numberOfSamples_ = glm::clamp(userSettings_.MaxNumberOfSamples - totalNumberOfSamples_, 0u, userSettings_.NumberOfSamples);
 	totalNumberOfSamples_ += numberOfSamples_;
 
 	Application::DrawFrame();
+	
+	FrameCounter++;
 }
 
 void RayTracer::Render(VkCommandBuffer commandBuffer, const uint32_t imageIndex)
@@ -155,9 +158,16 @@ void RayTracer::Render(VkCommandBuffer commandBuffer, const uint32_t imageIndex)
 	CheckAndUpdateBenchmarkState(prevTime);
 
 	// Render the scene
-	userSettings_.IsRayTraced
-		? Vulkan::RayTracing::Application::Render(commandBuffer, imageIndex)
-		: Vulkan::Application::Render(commandBuffer, imageIndex);
+	//userSettings_.IsRayTraced
+	//	? Vulkan::RayTracing::Application::Render(commandBuffer, imageIndex)
+	//	: Vulkan::Application::Render(commandBuffer, imageIndex);
+
+	if (userSettings_.IsRayTraced) {
+		Vulkan::Application::Render(commandBuffer, imageIndex);
+		Vulkan::RayTracing::Application::Render(commandBuffer, imageIndex);
+	}
+	else
+		Vulkan::Application::Render(commandBuffer, imageIndex);
 
 	// Render the UI
 	Statistics stats = {};

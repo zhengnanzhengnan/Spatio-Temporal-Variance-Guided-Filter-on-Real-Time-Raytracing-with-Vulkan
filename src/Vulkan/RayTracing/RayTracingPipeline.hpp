@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Vulkan/Vulkan.hpp"
+#include "Vulkan/Sampler.hpp"
 #include <memory>
 #include <vector>
 
@@ -16,6 +17,7 @@ namespace Vulkan
 	class ImageView;
 	class PipelineLayout;
 	class SwapChain;
+	class Sampler;
 }
 
 namespace Vulkan::RayTracing
@@ -35,6 +37,9 @@ namespace Vulkan::RayTracing
 			const TopLevelAccelerationStructure& accelerationStructure,
 			const ImageView& accumulationImageView,
 			const ImageView& outputImageView,
+			const ImageView& saveImageView,
+			const ImageView& motionVectorImageView,
+			const Sampler& motionVectorSampler,
 			const std::vector<Assets::UniformBuffer>& uniformBuffers,
 			const Assets::Scene& scene);
 		~RayTracingPipeline();

@@ -124,14 +124,20 @@ void UserInterface::Render(VkCommandBuffer commandBuffer, const Vulkan::FrameBuf
 	//ImGui::ShowStyleEditor();
 	ImGui::Render();
 
+	//因为共用一个renderpass构造函数这里也需要三个清除值
+	std::array<VkClearValue, 3> clearValues = {};
+	clearValues[0].color = { {0.0f, 0.0f, 0.0f, 1.0f} };
+	clearValues[1].depthStencil = { 1.0f, 0 };
+	clearValues[2].color = { {0.0f, 0.0f} };
+
 	VkRenderPassBeginInfo renderPassInfo = {};
 	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
 	renderPassInfo.renderPass = renderPass_->Handle();
 	renderPassInfo.framebuffer = frameBuffer.Handle();
 	renderPassInfo.renderArea.offset = { 0, 0 };
 	renderPassInfo.renderArea.extent = renderPass_->SwapChain().Extent();
-	renderPassInfo.clearValueCount = 0;
-	renderPassInfo.pClearValues = nullptr;
+	renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+	renderPassInfo.pClearValues = clearValues.data();
 
 	vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 	ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);

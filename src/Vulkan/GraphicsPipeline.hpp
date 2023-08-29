@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Vulkan.hpp"
+#include "Vulkan/Sampler.hpp"
+#include "Vulkan/ImageView.hpp"
 #include <memory>
 #include <vector>
 
@@ -16,6 +18,8 @@ namespace Vulkan
 	class PipelineLayout;
 	class RenderPass;
 	class SwapChain;
+	class Sampler;
+	class ImageView;
 
 	class GraphicsPipeline final
 	{
@@ -28,6 +32,8 @@ namespace Vulkan
 			const DepthBuffer& depthBuffer,
 			const std::vector<Assets::UniformBuffer>& uniformBuffers,
 			const Assets::Scene& scene,
+			const ImageView& depthImageView,
+			const Sampler& depthSampler,
 			bool isWireFrame);
 		~GraphicsPipeline();
 

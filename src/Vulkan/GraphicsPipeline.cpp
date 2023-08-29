@@ -19,6 +19,8 @@ GraphicsPipeline::GraphicsPipeline(
 	const DepthBuffer& depthBuffer,
 	const std::vector<Assets::UniformBuffer>& uniformBuffers,
 	const Assets::Scene& scene,
+	const ImageView& depthImageView,
+	const Sampler& depthSampler,
 	const bool isWireFrame) :
 	swapChain_(swapChain),
 	isWireFrame_(isWireFrame)
@@ -92,22 +94,25 @@ GraphicsPipeline::GraphicsPipeline(
 	depthStencil.front = {}; // Optional
 	depthStencil.back = {}; // Optional
 
-	VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
-	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-	colorBlendAttachment.blendEnable = VK_FALSE;
-	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
-	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
-	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD; // Optional
-	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
-	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
-	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD; // Optional
+	//现在有两个颜色混合附件（Color + Motion Vector）
+	VkPipelineColorBlendAttachmentState colorBlendAttachment[2] = {};
+	colorBlendAttachment[0].colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	colorBlendAttachment[0].blendEnable = VK_FALSE;
+	colorBlendAttachment[0].srcColorBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
+	colorBlendAttachment[0].dstColorBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
+	colorBlendAttachment[0].colorBlendOp = VK_BLEND_OP_ADD; // Optional
+	colorBlendAttachment[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE; // Optional
+	colorBlendAttachment[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional
+	colorBlendAttachment[0].alphaBlendOp = VK_BLEND_OP_ADD; // Optional
+
+	colorBlendAttachment[1] = colorBlendAttachment[0];//第二个附件和第一个附件设置一样
 
 	VkPipelineColorBlendStateCreateInfo colorBlending = {};
 	colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
 	colorBlending.logicOpEnable = VK_FALSE;
 	colorBlending.logicOp = VK_LOGIC_OP_COPY; // Optional
-	colorBlending.attachmentCount = 1;
-	colorBlending.pAttachments = &colorBlendAttachment;
+	colorBlending.attachmentCount = 2;//个数改为2
+	colorBlending.pAttachments = colorBlendAttachment;
 	colorBlending.blendConstants[0] = 0.0f; // Optional
 	colorBlending.blendConstants[1] = 0.0f; // Optional
 	colorBlending.blendConstants[2] = 0.0f; // Optional
@@ -116,9 +121,10 @@ GraphicsPipeline::GraphicsPipeline(
 	// Create descriptor pool/sets.
 	std::vector<DescriptorBinding> descriptorBindings =
 	{
-		{0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT},
+		{0, 1, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT},
 		{1, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT},
-		{2, static_cast<uint32_t>(scene.TextureSamplers().size()), VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}
+		{2, static_cast<uint32_t>(scene.TextureSamplers().size()), VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT},
+		{3, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT}
 	};
 
 	descriptorSetManager_.reset(new DescriptorSetManager(device, descriptorBindings, uniformBuffers.size()));
@@ -137,6 +143,12 @@ GraphicsPipeline::GraphicsPipeline(
 		materialBufferInfo.buffer = scene.MaterialBuffer().Handle();
 		materialBufferInfo.range = VK_WHOLE_SIZE;
 
+		//DepthImage buffer
+		VkDescriptorImageInfo depthImageInfo = {};
+		depthImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+		depthImageInfo.imageView = depthImageView.Handle();
+		depthImageInfo.sampler = depthSampler.Handle();
+
 		// Image and texture samplers
 		std::vector<VkDescriptorImageInfo> imageInfos(scene.TextureSamplers().size());
 
@@ -152,7 +164,8 @@ GraphicsPipeline::GraphicsPipeline(
 		{
 			descriptorSets.Bind(i, 0, uniformBufferInfo),
 			descriptorSets.Bind(i, 1, materialBufferInfo),
-			descriptorSets.Bind(i, 2, *imageInfos.data(), static_cast<uint32_t>(imageInfos.size()))
+			descriptorSets.Bind(i, 2, *imageInfos.data(), static_cast<uint32_t>(imageInfos.size())),
+			descriptorSets.Bind(i, 3, depthImageInfo)
 		};
 
 		descriptorSets.UpdateDescriptors(i, descriptorWrites);

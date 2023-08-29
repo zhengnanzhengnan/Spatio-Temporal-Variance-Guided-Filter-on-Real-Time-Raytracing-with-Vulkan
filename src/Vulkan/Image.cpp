@@ -13,15 +13,17 @@ Image::Image(const class Device& device, const VkExtent2D extent, const VkFormat
 }
 
 Image::Image(
-	const class Device& device, 
+	const class Device& device,
 	const VkExtent2D extent,
 	const VkFormat format,
 	const VkImageTiling tiling,
-	const VkImageUsageFlags usage) :
+	const VkImageUsageFlags usage)
+	:
 	device_(device),
 	extent_(extent),
 	format_(format),
-	imageLayout_(VK_IMAGE_LAYOUT_UNDEFINED)
+	imageLayout_(VK_IMAGE_LAYOUT_UNDEFINED),
+	isManaged_(false)
 {
 	VkImageCreateInfo imageInfo = {};
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -43,6 +45,58 @@ Image::Image(
 		"create image");
 }
 
+Image::Image(
+	const class Device& device, 
+	const VkExtent2D extent,
+	const VkFormat format,
+	const VkImageTiling tiling,
+	const VkImageUsageFlags usage,
+	bool isManaged) :
+	device_(device),
+	extent_(extent),
+	format_(format),
+	imageLayout_(VK_IMAGE_LAYOUT_UNDEFINED),
+	isManaged_(isManaged)
+{
+	VkImageCreateInfo imageInfo = {};
+	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	imageInfo.imageType = VK_IMAGE_TYPE_2D;
+	imageInfo.extent.width = extent.width;
+	imageInfo.extent.height = extent.height;
+	imageInfo.extent.depth = 1;
+	imageInfo.mipLevels = 1;
+	imageInfo.arrayLayers = 1;
+	imageInfo.format = format;
+	imageInfo.tiling = tiling;
+	imageInfo.initialLayout = imageLayout_;
+	imageInfo.usage = usage;
+	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+	imageInfo.flags = 0; // Optional
+
+	Check(vkCreateImage(device.Handle(), &imageInfo, nullptr, &image_),
+		"create image");
+}
+
+//用于包装一个vkImage
+Image::Image(
+	const class Device& device,
+	const VkExtent2D extent,
+	const VkFormat format,
+	const VkImageTiling tiling,
+	const VkImageUsageFlags usage,
+	const VkImage image,
+	bool isManaged):
+	device_(device),
+	extent_(extent),
+	format_(format),
+	imageLayout_(VK_IMAGE_LAYOUT_UNDEFINED),
+	image_(image),// <--- Use the VkImage handle that was passed in
+	isManaged_(isManaged)
+{
+	// No need to call vkCreateImage, because the VkImage already exists.
+}
+
 Image::Image(Image&& other) noexcept :
 	device_(other.device_),
 	extent_(other.extent_),
@@ -55,13 +109,14 @@ Image::Image(Image&& other) noexcept :
 
 Image::~Image()
 {
-	if (image_ != nullptr)
+	if (image_ != nullptr && !isManaged_)//如果图像是由 Vulkan 实现管理的，就不要试图销毁它
 	{
 		vkDestroyImage(device_.Handle(), image_, nullptr);
 		image_ = nullptr;
 	}
 }
 
+//为图像分配内存
 DeviceMemory Image::AllocateMemory(const VkMemoryPropertyFlags properties) const
 {
 	const auto requirements = GetMemoryRequirements();
@@ -73,6 +128,7 @@ DeviceMemory Image::AllocateMemory(const VkMemoryPropertyFlags properties) const
 	return memory;
 }
 
+//查询图像内存需求
 VkMemoryRequirements Image::GetMemoryRequirements() const
 {
 	VkMemoryRequirements requirements;
@@ -80,7 +136,8 @@ VkMemoryRequirements Image::GetMemoryRequirements() const
 	return requirements;
 }
 
-void Image::TransitionImageLayout(CommandPool& commandPool, VkImageLayout newLayout)
+//改变图像布局
+void Image::TransitionImageLayout(CommandPool& commandPool, VkImageLayout newLayout, bool depth)
 {
 	SingleTimeCommands::Submit(commandPool, [&](VkCommandBuffer commandBuffer)
 	{
@@ -96,7 +153,7 @@ void Image::TransitionImageLayout(CommandPool& commandPool, VkImageLayout newLay
 		barrier.subresourceRange.baseArrayLayer = 0;
 		barrier.subresourceRange.layerCount = 1;
 
-		if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) 
+		if (newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL || depth) 
 		{
 			barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 
@@ -137,6 +194,86 @@ void Image::TransitionImageLayout(CommandPool& commandPool, VkImageLayout newLay
 			sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 			destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
 		}
+		else if (imageLayout_ == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+		{
+			barrier.srcAccessMask = 0;
+			barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+			sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		}
+		else if (imageLayout_ == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+		{
+			barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+			barrier.dstAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+
+			sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+			destinationStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+		}
+		else if (imageLayout_ == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+		{
+			barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+			sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		}
+		else if (imageLayout_ == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_GENERAL)
+		{
+			barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+
+			sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+			destinationStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		}
+		else if (imageLayout_ == VK_IMAGE_LAYOUT_GENERAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+		{
+			barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+			barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+			sourceStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		}
+		else if (imageLayout_ == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_GENERAL)
+		{
+			barrier.srcAccessMask = 0;
+			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+
+			sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			destinationStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		}
+		else if (imageLayout_ == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+		{
+			barrier.srcAccessMask = 0;
+			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+			sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+			destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		}
+		else if (imageLayout_ == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+		{
+			barrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+			barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+			sourceStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+			destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+		}
+		else if (imageLayout_ == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+		{
+			barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+			sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+			destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+		}
+		else if (imageLayout_ == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+		{
+			barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+			barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+
+			sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+			destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+		}
 		else 
 		{
 			Throw(std::invalid_argument("unsupported layout transition"));
@@ -148,6 +285,7 @@ void Image::TransitionImageLayout(CommandPool& commandPool, VkImageLayout newLay
 	imageLayout_ = newLayout;
 }
 
+//把buffer里的数据拷贝到image
 void Image::CopyFrom(CommandPool& commandPool, const Buffer& buffer)
 {
 	SingleTimeCommands::Submit(commandPool, [&](VkCommandBuffer commandBuffer)

@@ -1,0 +1,58 @@
+#version 460
+#extension GL_KHR_vulkan_glsl:enable
+
+layout(set = 0, binding = 0) uniform sampler2D inputImage;  // 输入图像
+layout(set = 0, binding = 1) uniform sampler2D depthTexture; // 深度缓冲纹理
+
+layout(set = 0, binding = 2, rgba32f) writeonly uniform image2D outputImage; // 输出图像
+
+// 硬编码的联合双边滤波参数
+const float spatialSigma = 3.0;
+const float depthSigma = 5.0;
+const int filterRadius = 3;
+
+void main() {
+
+    ivec2 pixelCoord = ivec2(gl_GlobalInvocationID.xy);
+    vec3 centralColor = texelFetch(inputImage, pixelCoord, 0).rgb;
+    float centralDepth = texelFetch(depthTexture, pixelCoord, 0).r;
+
+    vec3 result = vec3(0.0);
+    float weightSum = 0.0;
+
+    //ivec2 imgSize = ivec2(1280, 720); 
+    ivec2 imgSize = ivec2(1920, 991); 
+
+    for (int y = -filterRadius; y <= filterRadius; ++y) {
+        for (int x = -filterRadius; x <= filterRadius; ++x) {
+            ivec2 offset = ivec2(x, y);
+            ivec2 sampleCoord = pixelCoord + offset;
+
+            // 边界检查
+            if (sampleCoord.x >= 0 && sampleCoord.x < imgSize.x &&
+                sampleCoord.y >= 0 && sampleCoord.y < imgSize.y) {
+
+                vec3 sampleColor = texelFetch(inputImage, sampleCoord, 0).rgb;
+                float sampleDepth = texelFetch(depthTexture, sampleCoord, 0).r;
+
+                float spatialDistance = length(vec2(x, y));
+                float depthDistance = abs(sampleDepth - centralDepth);
+
+                float spatialWeight = exp(-0.5 * pow(spatialDistance / spatialSigma, 2.0));
+                float depthWeight = exp(-0.5 * pow(depthDistance / depthSigma, 2.0));
+
+                float weight = spatialWeight * depthWeight;
+
+                result += weight * sampleColor;
+                weightSum += weight;
+            }
+        }
+    }
+
+    const float epsilon = 1e-5;  
+    result /= (weightSum + epsilon);
+    result = result / (result + vec3(1.0));
+    result *= 2.0f;  // 提升亮度50%
+
+    imageStore(outputImage, pixelCoord, vec4(result, 1.0));
+}

@@ -20,15 +20,22 @@ namespace Assets
 		glm::mat4 Projection;
 		glm::mat4 ModelViewInverse;
 		glm::mat4 ProjectionInverse;
+
 		float Aperture;
 		float FocusDistance;
 		float HeatmapScale;
+
 		uint32_t TotalNumberOfSamples;
 		uint32_t NumberOfSamples;
 		uint32_t NumberOfBounces;
 		uint32_t RandomSeed;
+
 		uint32_t HasSky; // bool
 		uint32_t ShowHeatmap; // bool
+		uint32_t FrameCounter; // 添加的帧计数器
+
+		glm::mat4 LastFrameModelView;
+		glm::mat4 LastFrameProjection;
 	};
 
 	class UniformBuffer

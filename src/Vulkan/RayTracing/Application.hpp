@@ -19,7 +19,7 @@ namespace Vulkan::RayTracing
 	public:
 
 		VULKAN_NON_COPIABLE(Application);
-
+		
 	protected:
 
 		Application(const WindowConfig& windowConfig, VkPresentModeKHR presentMode, bool enableValidationLayers);
@@ -36,9 +36,17 @@ namespace Vulkan::RayTracing
 		void CreateSwapChain() override;
 		void DeleteSwapChain() override;
 		void Render(VkCommandBuffer commandBuffer, uint32_t imageIndex) override;
+
+		VkDescriptorSet descriptorSet;
+		VkDescriptorSetLayout descriptorSetLayout;
+		VkDescriptorPool descriptorPool;
+		VkPipelineLayout pipelineLayout;
+		VkPipeline computePipeline;
 			   
 	private:
 
+		void CreatePostProcessing();
+		void PerformPostProcessing(VkCommandBuffer commandBuffer);
 		void CreateBottomLevelStructures(VkCommandBuffer commandBuffer);
 		void CreateTopLevelStructures(VkCommandBuffer commandBuffer);
 		void CreateOutputImage();
@@ -66,9 +74,15 @@ namespace Vulkan::RayTracing
 		std::unique_ptr<Image> outputImage_;
 		std::unique_ptr<DeviceMemory> outputImageMemory_;
 		std::unique_ptr<ImageView> outputImageView_;
+		std::unique_ptr<Sampler> outputImageSampler_;
 		
 		std::unique_ptr<class RayTracingPipeline> rayTracingPipeline_;
 		std::unique_ptr<class ShaderBindingTable> shaderBindingTable_;
+
+		std::unique_ptr<Image> myOutputImage_;
+		std::unique_ptr<DeviceMemory> myOutputImageMemory_;
+		std::unique_ptr<ImageView> myOutputImageView_;
+
 	};
 
 }

@@ -4,6 +4,10 @@
 #include "WindowConfig.hpp"
 #include <vector>
 #include <memory>
+#include "Image.hpp"
+#include "ImageView.hpp"
+#include "DepthBuffer.hpp"
+#include "Utilities/Glm.hpp"
 
 namespace Assets
 {
@@ -45,7 +49,7 @@ namespace Vulkan
 		const std::vector<Assets::UniformBuffer>& UniformBuffers() const { return uniformBuffers_; }
 		const class GraphicsPipeline& GraphicsPipeline() const { return *graphicsPipeline_; }
 		const class FrameBuffer& SwapChainFrameBuffer(const size_t i) const { return swapChainFramebuffers_[i]; }
-		
+
 		virtual const Assets::Scene& GetScene() const = 0;
 		virtual Assets::UniformBufferObject GetUniformBufferObject(VkExtent2D extent) const = 0;
 
@@ -67,6 +71,18 @@ namespace Vulkan
 		virtual void OnScroll(double xoffset, double yoffset) { }
 
 		bool isWireFrame_{};
+
+		size_t currentFrame_{};
+
+		//需要在光线追踪管线中使用的资源
+		std::unique_ptr<class Vulkan::ImageView> saveImageView_;
+		std::unique_ptr<class Vulkan::ImageView> motionVectorImageView_;
+
+		std::unique_ptr<Vulkan::Sampler> motionVectorSampler_;
+		std::unique_ptr<Vulkan::Sampler> depthSampler_;
+
+		Vulkan::ImageView* first_depthImageview_;
+		Vulkan::ImageView* first_saveImageview_;
 
 	private:
 
@@ -91,7 +107,22 @@ namespace Vulkan
 		std::vector<class Semaphore> renderFinishedSemaphores_;
 		std::vector<class Fence> inFlightFences_;
 
-		size_t currentFrame_{};
+		void Application::CopyImage(Vulkan::Image& srcImage, Vulkan::Image& dstImage);
+		void Application::CopyDepthImage(Vulkan::Image& srcImage, Vulkan::Image& dstImage);
+
+ 		std::unique_ptr<class Vulkan::Image> saveImage_;
+		std::unique_ptr<Vulkan::DeviceMemory> saveImageMemory_;
+
+		std::unique_ptr<class Vulkan::Image> depthImage_;
+		std::unique_ptr<Vulkan::DeviceMemory> depthImageMemory_;
+		std::unique_ptr<class Vulkan::ImageView> depthImageView_;
+
+		std::unique_ptr<class Vulkan::Image> motionVectorImage_;
+		std::unique_ptr<Vulkan::DeviceMemory> motionVectorImageMemory_;
+
+		// 保存当前的ModelView和Projection矩阵
+		glm::mat4 lastFrameModelView = glm::mat4(1.0f);  // 初始化为单位矩阵
+		glm::mat4 lastFrameProjection = glm::mat4(1.0f); // 初始化为单位矩阵
 	};
 
 }

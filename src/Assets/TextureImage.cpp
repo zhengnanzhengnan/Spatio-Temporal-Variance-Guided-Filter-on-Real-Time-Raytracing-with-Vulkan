@@ -29,9 +29,9 @@ TextureImage::TextureImage(Vulkan::CommandPool& commandPool, const Texture& text
 	sampler_.reset(new Vulkan::Sampler(device, Vulkan::SamplerConfig()));
 
 	// Transfer the data to device side.
-	image_->TransitionImageLayout(commandPool, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+	image_->TransitionImageLayout(commandPool, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, false);
 	image_->CopyFrom(commandPool, *stagingBuffer);
-	image_->TransitionImageLayout(commandPool, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	image_->TransitionImageLayout(commandPool, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, false);
 
 	// Delete the buffer before the memory
 	stagingBuffer.reset();

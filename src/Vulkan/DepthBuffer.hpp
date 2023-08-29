@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Vulkan.hpp"
+#include "Vulkan/Sampler.hpp"
 #include <memory>
 
 namespace Vulkan
@@ -21,7 +22,9 @@ namespace Vulkan
 		~DepthBuffer();
 
 		VkFormat Format() const { return format_; }
+
 		const class ImageView& ImageView() const { return *imageView_; }
+		const class Image& Image() const { return *image_; }
 
 		static bool HasStencilComponent(const VkFormat format)
 		{
@@ -31,7 +34,7 @@ namespace Vulkan
 	private:
 
 		const VkFormat format_;
-		std::unique_ptr<Image> image_;
+		std::unique_ptr<class Image> image_;
 		std::unique_ptr<DeviceMemory> imageMemory_;
 		std::unique_ptr<class ImageView> imageView_;
 	};
